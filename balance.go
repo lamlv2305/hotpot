@@ -32,9 +32,11 @@ func (h Hotpot) Balance(ctx context.Context, requests []BalanceRequest) ([]Balan
 	for _, req := range requests {
 		var calldata []byte
 		var err error
+		var to = req.Token
 
 		if req.Token == zeroAddress {
 			calldata, err = multicallABI.Pack("getEthBalance", req.Wallet)
+			to = h.multicallAddress
 		} else {
 			calldata, err = erc20ABI.Pack("balanceOf", req.Wallet)
 		}
@@ -44,7 +46,7 @@ func (h Hotpot) Balance(ctx context.Context, requests []BalanceRequest) ([]Balan
 		}
 
 		calls = append(calls, contract.Multicall3Call3{
-			Target:       req.Token,
+			Target:       to,
 			AllowFailure: true,
 			CallData:     calldata,
 		})

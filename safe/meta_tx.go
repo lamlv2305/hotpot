@@ -1,8 +1,9 @@
 package safe
 
 import (
-	"github.com/ethereum/go-ethereum/accounts/abi"
+	"bytes"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/lamlv2305/hotpot/contract"
 	"math/big"
 )
@@ -15,14 +16,9 @@ const (
 )
 
 var (
-	uint8Type, _   = abi.NewType("uint8", "", nil)
-	addressType, _ = abi.NewType("address", "", nil)
-	uint256Type, _ = abi.NewType("uint256", "", nil)
-	bytesType, _   = abi.NewType("bytes", "", nil)
-
-	usdc              = common.HexToAddress("0x3520C884C6211FDC12A27fe73696c79d45E11334")
-	multiSend141      = common.HexToAddress("0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526")
-	multiSendCallOnly = common.HexToAddress("0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526")
+	usdc                 = common.HexToAddress("0x3520C884C6211FDC12A27fe73696c79d45E11334")
+	multiSend141         = common.HexToAddress("0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526")
+	multiSendCallOnly141 = common.HexToAddress("0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526")
 )
 
 type MetaTransaction struct {
@@ -33,27 +29,19 @@ type MetaTransaction struct {
 }
 
 func (m MetaTransaction) Encode() ([]byte, error) {
-	arguments := abi.Arguments{
-		abi.Argument{Type: uint8Type},   // uint8 (operation)
-		abi.Argument{Type: addressType}, // address (to)
-		abi.Argument{Type: uint256Type}, // uint256 (value)
-		abi.Argument{Type: uint256Type}, // uint256 (data length)
-		abi.Argument{Type: bytesType},   // bytes (data)
+	input := [][]byte{
+		{byte(m.Operation)},
+		m.To.Bytes(),
+		math.U256Bytes(m.Value),
+		math.U256Bytes(big.NewInt(int64(len(m.Data)))),
+		m.Data,
 	}
 
-	operation := uint8(m.Operation)
-	dataLength := big.NewInt(int64(len(m.Data)))
-
-	encodedData, err := arguments.Pack(operation, m.To, m.Value, dataLength, m.Data)
-	if err != nil {
-		return nil, err
-	}
-
-	return encodedData, nil
+	return bytes.Join(input, nil), nil
 }
 
 func encodeMulti(txs []MetaTransaction, to common.Address) (*MetaTransaction, error) {
-	var data []byte
+	var transactionsEncoded []byte
 
 	for idx := range txs {
 		encodedData, err := txs[idx].Encode()
@@ -61,20 +49,19 @@ func encodeMulti(txs []MetaTransaction, to common.Address) (*MetaTransaction, er
 			return nil, err
 		}
 
-		data = append(data, encodedData...)
+		transactionsEncoded = append(transactionsEncoded, encodedData...)
 	}
 
 	multisendAbi, _ := contract.MultiSendMetaData.GetAbi()
-	encodedBytes, err := multisendAbi.Pack("multiSend", data)
+	data, err := multisendAbi.Pack("multiSend", transactionsEncoded)
 	if err != nil {
 		return nil, err
 	}
 
 	mtx := MetaTransaction{
-		Operation: OperationDelegateCall,
-		To:        to,
-		Value:     big.NewInt(0),
-		Data:      encodedBytes,
+		To:    to,
+		Value: big.NewInt(0),
+		Data:  data,
 	}
 
 	return &mtx, nil

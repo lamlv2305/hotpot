@@ -7,10 +7,13 @@ import (
 	"fmt"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/signer/core/apitypes"
 	"github.com/lamlv2305/hotpot/contract"
+	"github.com/lamlv2305/hotpot/sign"
 	"math/big"
 	"time"
 )
@@ -60,8 +63,8 @@ type Deployer struct {
 
 func (w *Deployer) CreateProxy(ctx context.Context, index *big.Int, options ...func(*RequestOptions)) (*types.Transaction, common.Address, error) {
 	opt := RequestOptions{
-		delay:   time.Second * 1,
-		timeout: time.Second * 30,
+		waitDelay:   time.Second * 1,
+		waitTimeout: time.Second * 30,
 	}
 
 	for idx := range options {
@@ -87,7 +90,7 @@ func (w *Deployer) CreateProxy(ctx context.Context, index *big.Int, options ...f
 		return nil, zero, err
 	}
 
-	timeoutCtx, cancelTimeoutCtx := context.WithTimeout(ctx, opt.timeout)
+	timeoutCtx, cancelTimeoutCtx := context.WithTimeout(ctx, opt.waitTimeout)
 	defer cancelTimeoutCtx()
 
 	for {
@@ -128,108 +131,113 @@ func (w *Deployer) ComputeProxyAddress(ctx context.Context, index *big.Int) (com
 }
 
 type ApproveOptions struct {
-	Spender common.Address
-	Amount  *big.Int
-	To      common.Address
-
+	Spender     common.Address
+	Amount      *big.Int
 	ProxyWallet common.Address
 }
 
 func (w *Deployer) Approve(ctx context.Context, opts ApproveOptions) (*types.Transaction, error) {
-	safeContract, err := contract.NewGnosisSafe(opts.ProxyWallet, w.client)
-	if err != nil {
-		return nil, err
-	}
-
-	//proxyNonce, err := safeContract.Nonce(&bind.CallOpts{Pending: true})
-	//if err != nil {
-	//	return nil, err
-	//}
-
 	tokenAbi, _ := contract.ERC20MetaData.GetAbi()
 	approveData, err := tokenAbi.Pack("approve", opts.Spender, opts.Amount)
 	if err != nil {
 		return nil, err
 	}
 
-	hash := crypto.Keccak256Hash(approveData)
-	signature, err := signHash(hash.Bytes(), w.pk)
+	return w.Exec(ctx, opts.ProxyWallet, []MetaTransaction{
+		{
+			To:    usdc,
+			Value: big.NewInt(0),
+			Data:  approveData,
+		},
+	})
+}
+
+func (w *Deployer) Exec(ctx context.Context, proxyWallet common.Address, txs []MetaTransaction) (*types.Transaction, error) {
+	destination := multiSendCallOnly141
+
+	for idx := range txs {
+		if txs[idx].Operation == OperationCall {
+			destination = multiSend141
+			break
+		}
+	}
+
+	multiSendTx, err := encodeMulti(txs, destination)
 	if err != nil {
 		return nil, err
 	}
 
-	//fmt.Println("Signature", hexutil.Encode(signature))
+	safeContract, err := contract.NewGnosisSafe(proxyWallet, w.client)
+	if err != nil {
+		return nil, err
+	}
 
-	multiSendTx, err := encodeMulti(
-		[]MetaTransaction{
-			{
-				Operation: OperationCall,
-				// USDC
-				To:    usdc,
-				Value: big.NewInt(0),
-				Data:  approveData,
+	proxyWalletNonce, err := safeContract.Nonce(&bind.CallOpts{
+		Pending: true,
+		Context: ctx,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	signature, err := sign.TypedData(w.pk, apitypes.TypedData{
+		Types: map[string][]apitypes.Type{
+			"SafeTx": {
+				{Name: "to", Type: "address"},
+				{Name: "value", Type: "uint256"},
+				{Name: "data", Type: "bytes"},
+				{Name: "operation", Type: "uint8"},
+				{Name: "safeTxGas", Type: "uint256"},
+				{Name: "baseGas", Type: "uint256"},
+				{Name: "gasPrice", Type: "uint256"},
+				{Name: "gasToken", Type: "address"},
+				{Name: "refundReceiver", Type: "address"},
+				{Name: "nonce", Type: "uint256"},
+			},
+			"EIP712Domain": {
+				{Name: "chainId", Type: "uint256"},
+				{Name: "verifyingContract", Type: "address"},
 			},
 		},
-		opts.To)
+		PrimaryType: "SafeTx",
+		Domain: apitypes.TypedDataDomain{
+			ChainId:           math.NewHexOrDecimal256(w.chainId.Int64()),
+			VerifyingContract: proxyWallet.String(),
+		},
+		Message: map[string]any{
+			"to":             destination.String(),
+			"value":          big.NewInt(0),
+			"operation":      big.NewInt(int64(OperationDelegateCall)), // delegate call
+			"data":           multiSendTx.Data,                         // multisend data
+			"safeTxGas":      big.NewInt(0),
+			"baseGas":        big.NewInt(0),
+			"gasPrice":       big.NewInt(0),
+			"gasToken":       zero.String(),
+			"refundReceiver": zero.String(),
+			"nonce":          proxyWalletNonce,
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	safeTx := Transaction{
-		To:             opts.To,
-		Value:          big.NewInt(0),
-		Data:           multiSendTx.Data,
-		Operation:      OperationDelegateCall,
-		SafeTxGas:      big.NewInt(0),
-		BaseGas:        big.NewInt(0),
-		GasPrice:       big.NewInt(0),
-		GasToken:       zero,
-		RefundReceiver: zero,
-	}
-
-	//rawSafeTx, err := safeContract.EncodeTransactionData(
-	//	&bind.CallOpts{Context: ctx, Pending: true},
-	//	safeTx.To,
-	//	safeTx.Value,
-	//	safeTx.Data,
-	//	uint8(safeTx.Operation),
-	//	safeTx.SafeTxGas,
-	//	safeTx.BaseGas,
-	//	safeTx.GasPrice,
-	//	safeTx.GasToken,
-	//	safeTx.RefundReceiver,
-	//	proxyNonce,
-	//)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//safeTxHashBytes := crypto.Keccak256(rawSafeTx)
-	//safeTxSignature, err := signHash(safeTxHashBytes, w.pk)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//fmt.Sprintln("safe tx sig", safeTxSignature)
 
 	transactOpts, err := bind.NewKeyedTransactorWithChainID(w.pk, w.chainId)
 	if err != nil {
 		return nil, err
 	}
+	transactOpts.Context = ctx
 
-	// to common.Address, value *big.Int, data []byte, operation uint8, safeTxGas *big.Int,
-	// baseGas *big.Int, gasPrice *big.Int, gasToken common.Address, refundReceiver common.Address, signatures []byte
 	tx, err := safeContract.ExecTransaction(
 		transactOpts,
-		safeTx.To,
-		safeTx.Value,
-		safeTx.Data,
-		uint8(safeTx.Operation),
-		safeTx.SafeTxGas,
-		safeTx.BaseGas,
-		safeTx.GasPrice,
-		safeTx.GasToken,
-		safeTx.RefundReceiver,
+		destination,
+		big.NewInt(0),
+		multiSendTx.Data,
+		uint8(OperationDelegateCall),
+		big.NewInt(0),
+		big.NewInt(0),
+		big.NewInt(0),
+		zero,
+		zero,
 		signature,
 	)
 	if err != nil {

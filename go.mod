@@ -5,6 +5,7 @@ go 1.22.0
 require (
 	github.com/ethereum/go-ethereum v1.14.11
 	github.com/pkg/errors v0.9.1
+	github.com/shopspring/decimal v1.4.0
 )
 
 require (

@@ -3,18 +3,18 @@ package safe
 import "time"
 
 type RequestOptions struct {
-	delay   time.Duration
-	timeout time.Duration
+	waitDelay   time.Duration
+	waitTimeout time.Duration
 }
 
-func WithDelay(delay time.Duration) func(*RequestOptions) {
+func WithWaitDelay(delay time.Duration) func(*RequestOptions) {
 	return func(r *RequestOptions) {
-		r.delay = delay
+		r.waitDelay = delay
 	}
 }
 
-func WithTimeout(timeout time.Duration) func(*RequestOptions) {
+func WithWaitTimeout(timeout time.Duration) func(*RequestOptions) {
 	return func(r *RequestOptions) {
-		r.timeout = timeout
+		r.waitTimeout = timeout
 	}
 }

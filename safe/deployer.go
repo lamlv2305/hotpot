@@ -19,8 +19,16 @@ import (
 )
 
 func WithProxyFactory(proxyFactory common.Address) func(*Deployer) {
-	return func(wallet *Deployer) {
-		wallet.proxyFactory = proxyFactory
+	return func(deployer *Deployer) {
+		deployer.proxyFactory = proxyFactory
+	}
+}
+
+func WithChainId(chainId *big.Int) func(*Deployer) {
+	return func(deployer *Deployer) {
+		if chainId != nil && chainId.Cmp(big.NewInt(0)) != 0 {
+			deployer.chainId = chainId
+		}
 	}
 }
 
@@ -30,21 +38,26 @@ func NewDeployer(client *ethclient.Client, pk *ecdsa.PrivateKey, options ...func
 		return nil, errors.New("cannot assert type: publicKey is not of type *ecdsa.PublicKey")
 	}
 
-	chainId, err := client.ChainID(context.TODO())
-	if err != nil {
-		return nil, err
-	}
-
 	w := &Deployer{
-		client:       client,
-		pk:           pk,
-		pub:          crypto.PubkeyToAddress(*publicKeyECDSA),
+		client: client,
+		pk:     pk,
+		pub:    crypto.PubkeyToAddress(*publicKeyECDSA),
+
+		// https://github.com/safe-global/safe-smart-account/blob/main/CHANGELOG.md#factory-contracts-3
 		proxyFactory: common.HexToAddress("0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2"),
-		chainId:      chainId,
 	}
 
 	for idx := range options {
 		options[idx](w)
+	}
+
+	if w.chainId == nil {
+		chainId, err := client.ChainID(context.TODO())
+		if err != nil {
+			return nil, err
+		}
+
+		w.chainId = chainId
 	}
 
 	return w, nil
@@ -100,7 +113,7 @@ func (w *Deployer) CreateProxy(ctx context.Context, index *big.Int, options ...f
 
 		receipt, err := w.client.TransactionReceipt(timeoutCtx, tx.Hash())
 		if err != nil {
-			time.Sleep(time.Second * 1)
+			time.Sleep(opt.waitDelay)
 			continue
 		}
 

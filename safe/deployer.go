@@ -143,22 +143,24 @@ func (w *Deployer) ComputeProxyAddress(ctx context.Context, index *big.Int) (com
 	return proxyFactory.ComputeProxyAddress(&bind.CallOpts{Context: ctx}, w.pub, salt)
 }
 
-type ApproveOptions struct {
-	Spender     common.Address
-	Amount      *big.Int
-	ProxyWallet common.Address
+type ApproveParams struct {
+	Spender common.Address
+	Amount  *big.Int
+	Token   common.Address
+
+	SafeWallet common.Address
 }
 
-func (w *Deployer) Approve(ctx context.Context, opts ApproveOptions) (*types.Transaction, error) {
+func (w *Deployer) Approve(ctx context.Context, params ApproveParams) (*types.Transaction, error) {
 	tokenAbi, _ := contract.ERC20MetaData.GetAbi()
-	approveData, err := tokenAbi.Pack("approve", opts.Spender, opts.Amount)
+	approveData, err := tokenAbi.Pack("approve", params.Spender, params.Amount)
 	if err != nil {
 		return nil, err
 	}
 
-	return w.Exec(ctx, opts.ProxyWallet, []MetaTransaction{
+	return w.Exec(ctx, params.SafeWallet, []MetaTransaction{
 		{
-			To:    usdc,
+			To:    params.Token,
 			Value: big.NewInt(0),
 			Data:  approveData,
 		},

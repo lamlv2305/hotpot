@@ -5,7 +5,6 @@ go 1.22.0
 require (
 	github.com/ethereum/go-ethereum v1.14.11
 	github.com/pkg/errors v0.9.1
-	github.com/shopspring/decimal v1.4.0
 )
 
 require (
@@ -55,7 +54,6 @@ require (
 	github.com/influxdata/influxdb1-client v0.0.0-20220302092344-a9ab5670611c // indirect
 	github.com/influxdata/line-protocol v0.0.0-20200327222509-2487e7298839 // indirect
 	github.com/jackpal/go-nat-pmp v1.0.2 // indirect
-	github.com/karalabe/hid v1.0.1-0.20240306101548-573246063e52 // indirect
 	github.com/klauspost/compress v1.16.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
 	github.com/kr/pretty v0.3.1 // indirect

@@ -26,10 +26,17 @@ func WithMultiCallAddress(address common.Address) func(*Hotpot) {
 
 func NewHotpot(rpc []string, options ...func(*Hotpot)) *Hotpot {
 	hp := &Hotpot{
-		rpc: rpc,
-
 		// https://www.multicall3.com/
 		multicallAddress: common.HexToAddress("0xcA11bde05977b3631167028862bE2a173976CA11"),
+	}
+
+	for idx := range rpc {
+		client, err := ethclient.DialContext(context.Background(), rpc[idx])
+		if err != nil {
+			continue
+		}
+
+		hp.clients = append(hp.clients, client)
 	}
 
 	for idx := range options {
@@ -40,20 +47,14 @@ func NewHotpot(rpc []string, options ...func(*Hotpot)) *Hotpot {
 }
 
 type Hotpot struct {
-	rpc              []string
+	clients          []*ethclient.Client
 	multicallAddress common.Address
 }
 
-func (h Hotpot) client(ctx context.Context) *ethclient.Client {
-	if len(h.rpc) == 0 {
+func (h Hotpot) randomClient() *ethclient.Client {
+	if len(h.clients) == 0 {
 		return nil
 	}
 
-	rpc := h.rpc[rng.Intn(len(h.rpc))]
-	client, err := ethclient.DialContext(ctx, rpc)
-	if err != nil {
-		return nil
-	}
-
-	return client
+	return h.clients[rng.Intn(len(h.clients))]
 }

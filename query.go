@@ -6,46 +6,28 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/lamlv2305/hotpot/contract"
 	"github.com/pkg/errors"
-	"math/big"
 )
 
-type BalanceRequest struct {
-	Wallet common.Address
-	Token  common.Address
+type QueryRequest struct {
+	To   common.Address
+	Data []byte
 }
 
-type BalanceResponse struct {
-	Wallet  common.Address
-	Token   common.Address
-	Balance *big.Int
+type QueryResponse struct {
+	Result  []byte
 	Success bool
 }
 
-func (h Hotpot) Balance(ctx context.Context, requests []BalanceRequest) ([]BalanceResponse, error) {
+func (h Hotpot) Query(ctx context.Context, requests []QueryRequest) ([]QueryResponse, error) {
 	client := h.randomClient()
 
 	var calls []contract.Multicall3Call3
 
 	for _, req := range requests {
-		var calldata []byte
-		var err error
-		var to = req.Token
-
-		if req.Token == zeroAddress {
-			calldata, err = multicallABI.Pack("getEthBalance", req.Wallet)
-			to = h.multicallAddress
-		} else {
-			calldata, err = erc20ABI.Pack("balanceOf", req.Wallet)
-		}
-
-		if err != nil {
-			return nil, err
-		}
-
 		calls = append(calls, contract.Multicall3Call3{
-			Target:       to,
+			Target:       req.To,
 			AllowFailure: true,
-			CallData:     calldata,
+			CallData:     req.Data,
 		})
 	}
 
@@ -72,14 +54,10 @@ func (h Hotpot) Balance(ctx context.Context, requests []BalanceRequest) ([]Balan
 		return nil, errors.WithMessage(err, "Failed to unpack Multicall aggregate3 result")
 	}
 
-	var result []BalanceResponse
-	for i, data := range unpackedResult {
-		balance := new(big.Int).SetBytes(data.ReturnData)
-
-		result = append(result, BalanceResponse{
-			Wallet:  requests[i].Wallet,
-			Token:   requests[i].Token,
-			Balance: balance,
+	var result []QueryResponse
+	for _, data := range unpackedResult {
+		result = append(result, QueryResponse{
+			Result:  data.ReturnData,
 			Success: data.Success,
 		})
 	}

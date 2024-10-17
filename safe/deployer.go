@@ -167,6 +167,22 @@ func (w *Deployer) Approve(ctx context.Context, params ApproveParams) (*types.Tr
 	})
 }
 
+func (w *Deployer) Transfer(ctx context.Context, params TransferParams) (*types.Transaction, error) {
+	tokenAbi, _ := contract.ERC20MetaData.GetAbi()
+	transferData, err := tokenAbi.Pack("transfer", params.To, params.Amount)
+	if err != nil {
+		return nil, err
+	}
+
+	return w.Exec(ctx, params.From, []MetaTransaction{
+		{
+			To:    params.Token,
+			Value: big.NewInt(0),
+			Data:  transferData,
+		},
+	})
+}
+
 func (w *Deployer) Exec(ctx context.Context, proxyWallet common.Address, txs []MetaTransaction) (*types.Transaction, error) {
 	destination := multiSendCallOnly141
 

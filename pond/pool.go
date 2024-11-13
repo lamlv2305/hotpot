@@ -7,7 +7,7 @@ import (
 )
 
 type Pond[T any] interface {
-	Do(ctx context.Context, task Task[T]) error
+	Submit(ctx context.Context, task Task[T]) error
 }
 
 func NewPond[T any](resources []T, options ...Option[T]) *pond[T] {
@@ -33,7 +33,7 @@ type pond[T any] struct {
 	timeout   time.Duration
 }
 
-func (p *pond[T]) Submit(ctx context.Context, task Task[T]) (err error) {
+func (p *pond[T]) Submit(ctx context.Context, task Task[T]) error {
 	timeout := p.timeout
 	if task.Timeout() > 0 {
 		timeout = task.Timeout()

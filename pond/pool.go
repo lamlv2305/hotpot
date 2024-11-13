@@ -2,7 +2,6 @@ package pond
 
 import (
 	"context"
-	"errors"
 	"time"
 )
 
@@ -12,25 +11,22 @@ type Pond[T any] interface {
 
 func NewPond[T any](resources []T, options ...Option[T]) *pond[T] {
 	p := &pond[T]{
-		resources: make(chan T, len(resources)),
-		timeout:   time.Second * 30,
+		timeout: time.Second * 30,
+		locker:  &channelLocker[T]{},
 	}
 
 	for idx := range options {
 		options[idx](p)
 	}
 
-	// Fill resource to channel
-	for idx := range resources {
-		p.resources <- resources[idx]
-	}
+	p.locker.Allocate(resources)
 
 	return p
 }
 
 type pond[T any] struct {
-	resources chan T
-	timeout   time.Duration
+	timeout time.Duration
+	locker  Locker[T]
 }
 
 func (p *pond[T]) Submit(ctx context.Context, task Task[T]) error {
@@ -44,40 +40,11 @@ func (p *pond[T]) Submit(ctx context.Context, task Task[T]) error {
 	timeoutCtx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
 
-	res, err := p.acquire(ctx)
+	res, err := p.locker.Acquire(timeoutCtx)
 	if err != nil {
 		return err
 	}
-	defer res.release()
+	defer p.locker.Unlock(ctx, *res)
 
-	return task.Run(timeoutCtx, res.value)
-}
-
-func (p *pond[T]) acquire(ctx context.Context) (*resource[T], error) {
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-
-	case res := <-p.resources:
-		result := resource[T]{
-			value: res,
-			release: func() {
-				select {
-				case p.resources <- res:
-				default:
-					// Do nothing if the pool is already full
-				}
-			},
-		}
-
-		return &result, nil
-
-	default:
-		return nil, errors.New("no resources available")
-	}
-}
-
-type resource[T any] struct {
-	value   T
-	release func()
+	return task.Run(timeoutCtx, *res)
 }

@@ -6,6 +6,6 @@ import (
 )
 
 type Task[T any] interface {
-	Deadline() *time.Time
-	Do(ctx context.Context, resource T) error
+	Timeout() time.Duration
+	Run(ctx context.Context, resource T) error
 }

@@ -6,7 +6,7 @@ import (
 )
 
 type Pond[T any] interface {
-	Submit(ctx context.Context, task Task[T]) error
+	Submit(ctx context.Context, task Task[T]) (any, error)
 }
 
 func NewPond[T any](resources []T, options ...Option[T]) *pond[T] {
@@ -23,6 +23,8 @@ func NewPond[T any](resources []T, options ...Option[T]) *pond[T] {
 
 	return p
 }
+
+var _ Pond[any] = (*pond[any])(nil)
 
 type pond[T any] struct {
 	timeout time.Duration

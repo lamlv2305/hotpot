@@ -2,10 +2,11 @@ package safe
 
 import (
 	"bytes"
+	"math/big"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/lamlv2305/hotpot/contract"
-	"math/big"
 )
 
 type OperationType uint8
@@ -16,7 +17,6 @@ const (
 )
 
 var (
-	usdc                 = common.HexToAddress("0x3520C884C6211FDC12A27fe73696c79d45E11334")
 	multiSend141         = common.HexToAddress("0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526")
 	multiSendCallOnly141 = common.HexToAddress("0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526")
 )

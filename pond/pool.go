@@ -29,7 +29,7 @@ type pond[T any] struct {
 	locker  Locker[T]
 }
 
-func (p *pond[T]) Submit(ctx context.Context, task Task[T]) error {
+func (p *pond[T]) Submit(ctx context.Context, task Task[T]) (any, error) {
 	timeout := p.timeout
 	if task.Timeout() > 0 {
 		timeout = task.Timeout()
@@ -42,7 +42,7 @@ func (p *pond[T]) Submit(ctx context.Context, task Task[T]) error {
 
 	res, err := p.locker.Acquire(timeoutCtx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer p.locker.Unlock(ctx, *res)
 

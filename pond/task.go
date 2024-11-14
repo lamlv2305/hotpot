@@ -7,5 +7,5 @@ import (
 
 type Task[T any] interface {
 	Timeout() time.Duration
-	Run(ctx context.Context, resource T) error
+	Run(ctx context.Context, resource T) (any, error)
 }

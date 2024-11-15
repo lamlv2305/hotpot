@@ -1,10 +1,14 @@
 package safe
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"errors"
 	"fmt"
+	"math/big"
+	"time"
+
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
@@ -14,8 +18,6 @@ import (
 	"github.com/ethereum/go-ethereum/signer/core/apitypes"
 	"github.com/lamlv2305/hotpot/contract"
 	"github.com/lamlv2305/hotpot/sign"
-	"math/big"
-	"time"
 )
 
 func WithProxyFactory(proxyFactory common.Address) func(*Deployer) {
@@ -96,7 +98,9 @@ func (w *Deployer) CreateProxy(ctx context.Context, index *big.Int, options ...f
 	}
 
 	var salt [32]byte
-	copy(salt[:], index.Bytes())
+	intBytes := index.Bytes()
+	paddedBytes := append(bytes.Repeat([]byte{0}, 32-len(intBytes)), intBytes...)
+	copy(salt[:], paddedBytes)
 
 	tx, err := proxyFactory.CreateProxy(deployer, zero, big.NewInt(0), zero, salt)
 	if err != nil {

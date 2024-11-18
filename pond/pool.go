@@ -46,7 +46,11 @@ func (p *pond[T]) Submit(ctx context.Context, task Task[T]) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer p.locker.Unlock(ctx, *res)
+	defer func(res *T) {
+		if res != nil {
+			p.locker.Unlock(ctx, *res)
+		}
+	}(res)
 
 	return task.Run(timeoutCtx, *res)
 }
